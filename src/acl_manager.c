@@ -52,5 +52,5 @@ void get_acl_path_murmur(uint64_t index, char *out_path, size_t max_len) {
     unsigned int level2 = (hash >> 16) & 0xFF;
     
     // Формируем путь: "data/acl/<XX>/<YY>/<index_str>.acl"
-    snprintf(out_path, max_len, "data/acl/%02X/%02X/%s.acl", level1, level2, index_str);
+    snprintf(out_path, max_len, "acl/%02X/%02X/%s.acl", level1, level2, index_str);
 }

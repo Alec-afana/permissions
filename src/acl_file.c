@@ -9,90 +9,121 @@
 #include <errno.h>
 #include <unistd.h>
 
+/**
+ * Пишет ACL в файл по хешированному пути:
+ *   data/acl/XX/YY/<index>.acl
+ */
 int write_acl_to_file(uint64_t index, my_acl_t *acl) {
-    char path[256];
-    get_acl_path_murmur(index, path, sizeof(path));
+    char rel_path[256];
+    get_acl_path_murmur(index, rel_path, sizeof(rel_path));
+    // rel_path == "acl/XX/YY/<index>.acl"
 
-    // Создаем необходимые директории: "data", "data/acl", "data/acl/<XX>", "data/acl/<XX>/<YY>"
-    mkdir("data", 0755);
-    mkdir("data/acl", 0755);
-    
-    // Для создания уровней используем тот же алгоритм, что и в get_acl_path_murmur:
-    char index_str[32];
-    snprintf(index_str, sizeof(index_str), "%llu", (unsigned long long)index);
-    uint32_t hash = murmurhash2(index_str, (int)strlen(index_str), 0x9747b28c);
-    unsigned int level1 = (hash >> 24) & 0xFF;
-    unsigned int level2 = (hash >> 16) & 0xFF;
-    char dir1[64], dir2[128];
-    snprintf(dir1, sizeof(dir1), "data/acl/%02X", level1);
-    snprintf(dir2, sizeof(dir2), "%s/%02X", dir1, level2);
-    mkdir(dir1, 0755);
-    mkdir(dir2, 0755);
-
-    FILE *file = fopen(path, "wb");
-    if (!file) {
-        perror("Ошибка открытия файла ACL");
-        return -1;
+    // Получаем директорию (всё до последнего '/')
+    char dir_path[256];
+    strncpy(dir_path, rel_path, sizeof(dir_path));
+    char *slash = strrchr(dir_path, '/');
+    if (!slash) {
+        fprintf(stderr, "Invalid ACL path: %s\n", rel_path);
+        return -EINVAL;
     }
-    fwrite(&acl->count, sizeof(int), 1, file);
-    fwrite(acl->entries, sizeof(acl_entry_t), acl->count, file);
-    fclose(file);
-    //printf("ACL успешно записан: %s\n", path);
-    return 0;
+    *slash = '\0';  // dir_path == "acl/XX/YY"
+
+    // Создаём recursively: data/acl/.../YY
+    if (custom_mkdir(dir_path) < 0) {
+        perror("custom_mkdir");
+        return -errno;
+    }
+
+    // Упаковываем count + entries в один буфер
+    size_t hdr_size = sizeof(int);
+    size_t entries_size = acl->count * sizeof(acl_entry_t);
+    size_t total_size = hdr_size + entries_size;
+
+    char *buf = malloc(total_size);
+    if (!buf) {
+        fprintf(stderr, "OOM packing ACL\n");
+        return -ENOMEM;
+    }
+    memcpy(buf, &acl->count, hdr_size);
+    memcpy(buf + hdr_size, acl->entries, entries_size);
+
+    // Записываем файл в one-shot
+    int ret = custom_write_file(rel_path, buf, total_size);
+    if (ret < 0) {
+        fprintf(stderr, "custom_write_file(%s) failed: %d\n", rel_path, ret);
+    }
+    free(buf);
+    return ret;
 }
 
+/**
+ * Читает ACL из файла:
+ *   data/acl/XX/YY/<index>.acl
+ */
 my_acl_t *read_acl_from_file(uint64_t index) {
-    char path[256];
-    get_acl_path_murmur(index, path, sizeof(path));
+    char rel_path[256];
+    get_acl_path_murmur(index, rel_path, sizeof(rel_path));
 
-    FILE *file = fopen(path, "rb");
-    if (!file) {
-        perror("Ошибка открытия файла ACL");
+    size_t file_size;
+    char *buf = custom_read_file(rel_path, &file_size);
+    if (!buf) {
+        fprintf(stderr, "custom_read_file(%s) failed\n", rel_path);
         return NULL;
     }
+
+    // Проверяем, что хотя бы помещается заголовок
+    if (file_size < sizeof(int)) {
+        fprintf(stderr, "ACL file too small: %s\n", rel_path);
+        free(buf);
+        return NULL;
+    }
+
     int count;
-    if (fread(&count, sizeof(int), 1, file) != 1) {
-        fclose(file);
-        fprintf(stderr, "Ошибка чтения размера ACL-файла\n");
-        return NULL;
-    }
+    memcpy(&count, buf, sizeof(int));
     if (count <= 0) {
-        fclose(file);
-        fprintf(stderr, "Ошибка: некорректное количество ACL-записей\n");
+        fprintf(stderr, "Invalid ACL count %d in %s\n", count, rel_path);
+        free(buf);
         return NULL;
     }
-    my_acl_t *acl = malloc(sizeof(my_acl_t));
+
+    size_t expected = sizeof(int) + count * sizeof(acl_entry_t);
+    if ((size_t)file_size < expected) {
+        fprintf(stderr, "ACL file truncated: %s (got %zu, need %zu)\n",
+                rel_path, file_size, expected);
+        free(buf);
+        return NULL;
+    }
+
+    my_acl_t *acl = malloc(sizeof(*acl));
     if (!acl) {
-        fclose(file);
+        perror("malloc acl");
+        free(buf);
         return NULL;
     }
     acl->count = count;
     acl->entries = malloc(count * sizeof(acl_entry_t));
     if (!acl->entries) {
+        perror("malloc entries");
         free(acl);
-        fclose(file);
+        free(buf);
         return NULL;
     }
-    if (fread(acl->entries, sizeof(acl_entry_t), count, file) != (size_t)count) {
-        free(acl->entries);
-        free(acl);
-        fclose(file);
-        fprintf(stderr, "Ошибка чтения ACL-записей\n");
-        return NULL;
-    }
-    fclose(file);
-    //printf("ACL успешно загружен: %s\n", path);
+    memcpy(acl->entries, buf + sizeof(int), count * sizeof(acl_entry_t));
+    free(buf);
     return acl;
 }
 
+/**
+ * Удаляет ACL-файл по относительному пути, используя custom_remove_file().
+ */
 int delete_acl_file(uint64_t index) {
-    char path[256];
-    get_acl_path_murmur(index, path, sizeof(path));
-    if (remove(path) == 0) {
-        printf("ACL-файл %s успешно удалён.\n", path);
-        return 0;
-    } else {
-        perror("Ошибка удаления ACL-файла");
-        return -1;
+    char rel_path[256];
+    get_acl_path_murmur(index, rel_path, sizeof(rel_path));
+    // rel_path == "acl/XX/YY/<index>.acl"
+    int ret = custom_remove_file(rel_path);
+    if (ret < 0) {
+        fprintf(stderr, "Ошибка удаления ACL-файла %s: %s\n",
+                rel_path, strerror(-ret));
     }
+    return ret;
 }

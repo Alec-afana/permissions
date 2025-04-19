@@ -109,3 +109,20 @@ char *custom_read_file(const char *path, size_t *out_size) {
     *out_size = size;
     return buffer;
 }
+
+
+/**
+ * Удаляет файл по относительному пути внутри FS_ROOT ("data/").
+ * @param path Относительный путь, например "acl/AA/BB/123.acl"
+ * @return 0 при успехе, -errno при ошибке
+ */
+int custom_remove_file(const char *path) {
+    char full_path[512];
+    // FS_ROOT определён в этом файле как макрос, обычно "data"
+    snprintf(full_path, sizeof(full_path), "%s/%s", FS_ROOT, path);
+    if (remove(full_path) == 0) {
+        return 0;
+    } else {
+        return -errno;
+    }
+}

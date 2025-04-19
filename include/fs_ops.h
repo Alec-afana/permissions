@@ -9,4 +9,8 @@ int custom_create_file(const char *path);       // Создание файла
 int custom_write_file(const char *path, const char *data, size_t len); // Запись данных в файл
 char *custom_read_file(const char *path, size_t *out_size);            // Чтение файла в буфер
 
+/* Новая функция удаления файла */
+int custom_remove_file(const char *path);
+
+
 #endif // FS_OPS_H
