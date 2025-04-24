@@ -15,7 +15,7 @@ typedef enum {
 
 typedef struct acl_entry {
     acl_tag_t tag;  // Тип записи ACL
-    uint32_t id;    // UID или GID (если применимо); для специальных записей – 0
+    uint32_t id;    // идентификатор пользователя или группы
     mode_t perms;   // Права доступа (битовая маска: 4 – чтение, 2 – запись, 1 – выполнение)
 } acl_entry_t;
 
