@@ -99,7 +99,7 @@ void run_scale_tests(int num_files) {
 
         // Создаем объемный пользовательский файл (например, 1 МБ данных)
         char file_path[512];
-        snprintf(file_path, sizeof(file_path), "data/userfiles/file_%lu.dat", index);
+        snprintf(file_path, sizeof(file_path), "data/userfiles/userfile_%lu.dat", index);
         if (custom_create_file(file_path) != 0) {
             printf("Ошибка создания файла %s\n", file_path);
         } else {
