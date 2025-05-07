@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define FS_ROOT "/mnt/tmpfs_myfs2"//"data"
+#define FS_ROOT "data"//"/mnt/tmpfs_myfs2" //"data"
 
 int custom_mkdir(const char *path) {
     char full_path[512];

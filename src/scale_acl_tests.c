@@ -30,7 +30,9 @@ int main(int argc, char *argv[]) {
 
     uint64_t t0 = get_time_ns();
     for (size_t i = 0; i < num; i++) {
-        uint64_t idx = 100000000ULL + i;
+        uint64_t idx = i; //100000000ULL + i;
+	//fprintf(stderr, "запись ACL для idx=%llu\n",
+        //            (unsigned long long)idx);
         if (write_acl_to_file(idx, &acl) != 0) {
             fprintf(stderr, "Ошибка записи ACL для idx=%llu\n",
                     (unsigned long long)idx);

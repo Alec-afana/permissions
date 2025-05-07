@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 // Минимальная степень B‑дерева (t). Каждый узел (кроме корня) содержит не менее t-1 ключей и не более 2*t-1.
-#define MIN_DEGREE 3  
+#define MIN_DEGREE 32
 #define MAX_KEYS (2 * MIN_DEGREE - 1)
 #define MIN_KEYS (MIN_DEGREE - 1)
 
